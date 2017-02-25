@@ -2,7 +2,7 @@
 
 **Author:** Steven Obua (steven.obua@gmail.com)
 
-[![DOI](https://zenodo.org/badge/81583725.svg)](https://zenodo.org/badge/latestdoi/81583725)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.322417.svg)](https://doi.org/10.5281/zenodo.322417)
 
 This software accompanies the paper [Local Lexing](https://arxiv.org/abs/1702.03277). It is a prototype for local lexing implemented in Scala/ScalaJS. 
 
