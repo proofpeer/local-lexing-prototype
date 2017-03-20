@@ -1,4 +1,4 @@
-package net.proofpeer.locallexing.kernel.examples.simple
+package net.proofpeer.locallexing.examples.simple
 
 final object Examples {
 
@@ -16,7 +16,7 @@ final object Examples {
   def nonterminal(name : String, rules : Rule[P]*) : Nonterminal[P] = 
     Nonterminal(name, rules.toVector)
 
-  def terminal[CHAR](name : String, lexer : Lexer[CHAR, P]) : Terminal[CHAR, P] =
+  def terminal(name : String, lexer : Lexer[Char, P]) : Terminal[Char, P] =
     Terminal(name, lexer)
 
   def makeParser[CHAR](grammar : Grammar[CHAR, P]) : Earley[CHAR, P] = {
@@ -25,16 +25,20 @@ final object Examples {
     new Earley(kernel)
   }
 
+  def mkGrammar(nonterminals : Vector[Nonterminal[P]], terminals : Vector[Terminal[Char, P]], selector : Selector[Char, P]) : Grammar[Char, P] = {
+    Grammar[Char, P](nonterminals, terminals, (), selector)
+  }
+
   def run(name : String, grammar : Grammar[Char, P], inputStr : String) {
     val parser = makeParser(grammar)
     val input = new StringInput(inputStr)
     val result = parser.parse(input)
     result match {
-      case Left(parseTree) => 
+      case Left(parsetrees) => 
         println("Example: "+name)
         println("parsing of '" + inputStr + "' was successful")
-        println("number of different parse trees (excluding cycles): " + parseTree.countTrees)
-        val paths = ParseTree.collectPaths(parseTree).toVector
+        println("number of different parse trees (excluding cycles): " + ParseTree.countTrees(parsetrees : _*))
+        val paths = ParseTree.collectPaths(parsetrees : _*).toVector
         println("number of different paths (excluding cycles): " + paths.size)
         for (p <- 1 to paths.size) {
           println("  " + p + ") " + ParseTree.printPath(grammar, input, paths(p-1)))  

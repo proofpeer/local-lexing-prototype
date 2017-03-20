@@ -39,8 +39,9 @@ final object LexingUtils {
     def lex(input : Input[CHAR], startPosition : Int, param : P) : Result = {
       var maxlen = -1
       for ((len1, _) <- lexer1.lex(input, startPosition, P)) {
-        for ((len2, _) <- lexer2.lex(input, startPosition + len1, P))
+        for ((len2, _) <- lexer2.lex(input, startPosition + len1, P)){
           maxlen = Math.max(maxlen, len1 + len2)
+        }
       }
       if (maxlen < 0) EMPTYSET else Set((maxlen, P))
     }    
@@ -62,7 +63,7 @@ final object LexingUtils {
           }          
         }
       }
-      if (done.isEmpty) EMPTYSET else Set((done.last, P))
+      if (done.isEmpty) Set((0, P)) else Set((done.last, P))
     }
   } 
 
@@ -82,23 +83,32 @@ final object LexingUtils {
     def select(input : Input[CHAR], startPosition : Int, A : Tokens[P], B : Tokens[P]) = B
   }
 
- /* def orderSelector[CHAR](less : (TS, Int, TS, Int) => Boolean) : Selector[CHAR, P] = new Selector[CHAR, P] {
+  def orderSelector[CHAR](less : (TS, Int, TS, Int) => Boolean) : Selector[CHAR, P] = new Selector[CHAR, P] {
 
     def select(input : Input[CHAR], startPosition : Int, A : Tokens[P], B : Tokens[P]) = {
       var tokens = A
-      for (y <- B) {
-        var is_max = true
-        for (x <- B) {
-          if (less(y._1._1, y._2._1, x._1._1, x._2._1)) {
-            is_max = false
+      for ((y, ylens) <- B) {
+        for (ylen <- ylens) {
+          var is_max = true
+          for ((x, xlens) <- B) {
+            for (xlen <- xlens) {
+              if (less(y._1, ylen._1, x._1, xlen._1)) {
+                is_max = false
+              }
+            }
+          }
+          if (is_max) {
+            tokens.get(y) match {
+              case None => tokens = tokens + (y -> Set(ylen))
+              case Some(ylens) => tokens = tokens + (y -> (ylens + ylen))
+            }
           }
         }
-        if (is_max) tokens = tokens + y
       }
       tokens
     }
 
-  }*/
+  }
 
 
 } 

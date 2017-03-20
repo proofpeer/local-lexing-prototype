@@ -40,10 +40,14 @@ final object ParseTree {
   }
 
   def label[CHAR, P](grammar : Grammar[CHAR, P], tree : ParseTree[P]) : String = {
+    def isNil(x : Any) : Boolean = {
+      x.isInstanceOf[Unit]
+    }
     val name = grammar.nameOf(tree.symbol)
-    //if (tree.input != Domain.V.NIL || tree.output != Domain.V.NIL) {
-    name + "("+tree.input+","+tree.output+")"
-    //} else name
+    if (isNil(tree.input) && isNil(tree.output))
+      name
+    else
+      name + "("+tree.input+","+tree.output+")"
   }
 
   type Path[P] = Vector[TerminalNode[P]]
@@ -62,12 +66,7 @@ final object ParseTree {
 
   def collectPaths[P](tree : ParseTree[P]) : Paths[P] = {
     tree match {
-      case node : AmbiguousNode[P] =>
-        var paths : Paths[P] = Set()
-        for (alternative <- node.alternatives) {
-          paths = paths ++ collectPaths(alternative)
-        }
-        paths
+      case node : AmbiguousNode[P] => collectPaths(node.alternatives : _*)
       case node : TerminalNode[P] => Set(Vector(node))
       case node : NonterminalNode[P] =>
         var paths : Paths[P] = Set(Vector())
@@ -77,6 +76,20 @@ final object ParseTree {
         }
         paths
     }
+  }
+
+  def collectPaths[P](trees : ParseTree[P]*) : Paths[P] = {
+    var paths : Paths[P] = Set()
+    for (tree <- trees) {
+      paths = paths ++ collectPaths(tree)
+    }
+    paths
+  }
+
+  def countTrees[P](trees : ParseTree[P]*) : Int = {
+    var count = 0
+    for (tree <- trees) count += tree.countTrees
+    count
   }
 
   private def appendTrees[P](A : Vector[Vector[ParseTree[P]]], B : Trees[P]) : Vector[Vector[ParseTree[P]]] = {

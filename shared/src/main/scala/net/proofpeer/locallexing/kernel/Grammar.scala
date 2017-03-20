@@ -7,7 +7,6 @@ final case class Grammar[CHAR, P](
   nonterminals : Vector[Grammar.Nonterminal[P]],
   terminals : Vector[Grammar.Terminal[CHAR, P]],
   startParam : P,
-  endParam : P,
   selector : Grammar.Selector[CHAR, P]) 
 {
   import Grammar._

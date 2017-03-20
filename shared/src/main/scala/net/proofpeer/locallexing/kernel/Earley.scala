@@ -56,11 +56,6 @@ object Earley {
 
   }
 
-  def debug(s : String) {
-    //println("debug: " + s)
-  }
-
-
   trait CoreItem[P] {
 
     def id : Int
@@ -185,7 +180,6 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
   }
   
   def Init() : Bin = {
-    debug("Init")
     var bin : Bin = Set()
     val numCoreItems = kernel.numCoreItems
     for (coreItemId <- 0 until numCoreItems) {
@@ -205,7 +199,6 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
   }
 
   def Predict(bins : Bins, k : Int) : Boolean = {
-    debug("predict " + k + binSize(bins, k))
     var bin = bins(k)
     val oldSize = bin.size
     for (item <- bin) {
@@ -227,7 +220,6 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
   }
 
   def Complete(bins : Bins, k : Int) : Boolean = {
-    debug("complete " + k + binSize(bins, k))
     var bin = bins(k)
     val oldSize = bin.size
     for (item <- bin) {
@@ -267,19 +259,18 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
           tokens.get(x) match {
             case None =>
               val result = grammar.get(ts).lexer.lex(input, k, param)
-              tokens = tokens + (x -> result)
+              if (!result.isEmpty)
+                tokens = tokens + (x -> result)
             case _ =>
           }
         case _ =>
       }
     }
     tokens = grammar.selector.select(input, k, prevTokens, tokens)
-    debug("found tokens at " + k + ":" + tokens) 
     tokens
   }
 
   def Scan(bins : Bins, tokens : Tokens[P], k : Int) : Boolean = {
-    debug("scan " + k + binSize(bins, k))
     val bin = bins(k)
     val oldSize = bin.size
     for (item <- bin) {
@@ -328,28 +319,28 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
     }
   }
 
-  def wasRecognized(bin : Bin) : Boolean = {
+  def computeResults(bin : Bin) : Set[P] = {
     val grammar = kernel.grammar
+    var results : Set[P] = Set()
     for (item <- bin) {
       if (item.origin == 0) {
         val coreItem = kernel.coreItemOf(item)
         if (coreItem.nonterminal == kernel.startNonterminal && coreItem.nextSymbol == None 
-          && item.param == grammar.startParam 
-          && item.result == grammar.endParam)
-          return true
+          && item.param == grammar.startParam)
+          results = results + item.result
       }
     }
-    false
+    results
   }
 
-  def recognize(input : Input[CHAR]) : Either[Array[Bin], Int] = {
+  def recognize(input : Input[CHAR]) : Either[(Array[Bin], Set[P]), Int] = {
     val inputSize = input.size
     val bins : Bins = new Array(inputSize + 1)
     for (k <- 0 to inputSize) bins(k) = Set()
     bins(0) = Init()
     for (k <- 0 to inputSize) computeBin(input, bins, k)
-    val recognized = wasRecognized(bins(inputSize))
-    if (!recognized) {
+    val results = computeResults(bins(inputSize))
+    if (results.isEmpty) {
       var k = inputSize
       var foundNonemptyBin = false
       while (k >= 0 && !foundNonemptyBin) {
@@ -359,7 +350,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
       }
       Right(k)
     } else {
-      Left(bins)
+      Left((bins, results))
     } 
   }
 
@@ -440,11 +431,14 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
 
   }
 
-  def parse(input : Input[CHAR]) : Either[ParseTree[P], Int] = {
+  def parse(input : Input[CHAR]) : Either[Vector[ParseTree[P]], Int] = {
     recognize(input) match {
-      case Left(bins) =>
+      case Left((bins, results)) =>
         val ptc = new ParseTreeConstruction(bins)
-        Left(ptc.getParseTree(kernel.startNonterminal, kernel.grammar.startParam, kernel.grammar.endParam, 0, input.size))
+        var parsetrees : Vector[ParseTree[P]] = Vector()
+        for (result <- results)
+          parsetrees = parsetrees :+ ptc.getParseTree(kernel.startNonterminal, kernel.grammar.startParam, result, 0, input.size)
+        Left(parsetrees)
       case Right(k) => 
         Right(k) 
     }
