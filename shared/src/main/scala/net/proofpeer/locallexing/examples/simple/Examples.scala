@@ -37,9 +37,15 @@ final object Examples {
       case Left(parsetrees) => 
         println("Example: "+name)
         println("parsing of '" + inputStr + "' was successful")
-        println("number of different parse trees (excluding cycles): " + ParseTree.countTrees(parsetrees : _*))
+        val hasCycles = parsetrees.exists(_.hasCycles)
+        var note : String = ": "
+        if (hasCycles) {
+          println("cycles have been found")
+          note = " (excluding cycles): "
+        }
+        println("number of different parse trees" + note + ParseTree.countTrees(parsetrees : _*))
         val paths = ParseTree.collectPaths(parsetrees : _*).toVector
-        println("number of different paths (excluding cycles): " + paths.size)
+        println("number of different paths" + note + paths.size)
         for (p <- 1 to paths.size) {
           println("  " + p + ") " + ParseTree.printPath(grammar, input, paths(p-1)))  
         }

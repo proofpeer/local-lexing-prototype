@@ -6,7 +6,7 @@ sealed trait ParseTree[P] {
   def input : P
   def output : P
   def hasAmbiguities : Boolean
-  def ambiguities : List[ParseTree.AmbiguousNode[P]]
+  def hasCycles : Boolean
   def countTrees : Int
 }
 
@@ -15,28 +15,47 @@ final object ParseTree {
   final case class AmbiguousNode[P](symbol : Grammar.NS, span : (Int, Int), alternatives : Vector[NonterminalNode[P]], input : P, output : P) extends ParseTree[P]
   {
     def hasAmbiguities = true
-    def ambiguities = List(this)
     lazy val countTrees : Int = {
       var c : Int = 0
       for (alternative <- alternatives) c += alternative.countTrees
       c
     }
+    lazy val hasCycles : Boolean = {
+      var foundCycle = false
+      for (alternative <- alternatives) {
+        if (alternative.hasCycles) foundCycle = true
+      }
+      foundCycle
+    }
   }
 
   final case class NonterminalNode[P](symbol : Grammar.NS, ruleindex : Int, span : (Int, Int), rhs : Vector[ParseTree[P]], input : P, output : P) extends ParseTree[P] {
     lazy val hasAmbiguities = rhs.exists(_.hasAmbiguities)
-    def ambiguities = rhs.toList.flatMap(_.ambiguities)
     lazy val countTrees : Int = {
       var c : Int = 1
       for (tree <- rhs) c *= tree.countTrees
       c
     }
+    lazy val hasCycles : Boolean = {
+      var foundCycle = false
+      for (tree <- rhs) {
+        if (tree.hasCycles) foundCycle = true
+      }
+      foundCycle
+    }
   }
 
   final case class TerminalNode[P](symbol : Grammar.TS, span : (Int, Int), input : P, output : P) extends ParseTree[P] {
     def hasAmbiguities = false
-    def ambiguities = List()
+    def hasCycles = false
     def countTrees : Int = 1
+  }
+
+  final case class CycleNode[P](symbol : Grammar.Symbol, span : (Int, Int), input : P, output : P) extends ParseTree[P] {
+    var tree : ParseTree[P] = null   
+    def hasAmbiguities = true
+    def hasCycles = true
+    def countTrees = 0
   }
 
   def label[CHAR, P](grammar : Grammar[CHAR, P], tree : ParseTree[P]) : String = {
@@ -75,6 +94,7 @@ final object ParseTree {
           paths = combinePaths(paths, childPaths)
         }
         paths
+      case node : CycleNode[P] => Set()
     }
   }
 
@@ -119,6 +139,7 @@ final object ParseTree {
           trees = appendTrees(trees, childTrees)
         }
         trees.map (rhs => NonterminalNode(node.symbol, node.ruleindex, node.span, rhs, node.input, node.output))
+      case node : CycleNode[P] => Vector()
     }
   }
 

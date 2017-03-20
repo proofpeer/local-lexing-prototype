@@ -359,6 +359,16 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
     import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
     private val cache : MutableMap[(Grammar.NS, P, P, Int, Int), ParseTree[P]] = MutableMap()
     private val visiting : MutableSet[(Grammar.NS, P, P, Int, Int)] = MutableSet()
+    private val cycles : MutableMap[(Grammar.NS, P, P, Int, Int), ParseTree.CycleNode[P]] = MutableMap()
+
+    def fillCycles() {
+      for ((key, tree) <- cache) {
+        cycles.get(key) match {
+          case None => // do nothing
+          case Some(cycle) => cycle.tree = tree
+        }  
+      }
+    }
 
     def getParseTree(nonterminal : Grammar.NS, param : P, result : P,
       startPosition : Int, endPosition : Int) : ParseTree[P] = 
@@ -366,7 +376,16 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
       val key = (nonterminal, param, result, startPosition, endPosition)
       cache.get(key) match {
         case None => 
-          if (visiting(key)) return null
+          if (visiting(key)) {
+            cycles.get(key) match {
+              case None =>
+                val cycle = new ParseTree.CycleNode[P](nonterminal, (startPosition, endPosition), param, result)
+                cycles += (key -> cycle)
+                return cycle
+              case Some(cycle) =>
+                return cycle 
+            }
+          }
           visiting += key
           val r = constructParseTree(nonterminal, param, result, startPosition, endPosition)
           cache += (key -> r)
@@ -422,7 +441,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
           nonterminal + " from " + startPosition + " to " + endPosition)
         case List(foundItem) => mkTree(foundItem)
         case _ =>
-          val trees = foundItems.map(mkTree _).toVector.filter(t => t != null)
+          val trees = foundItems.map(mkTree _).toVector
           val node = trees.head
           if (trees.size == 1) node
           else AmbiguousNode[P](node.symbol, node.span, trees, node.input, node.output)
@@ -438,6 +457,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
         var parsetrees : Vector[ParseTree[P]] = Vector()
         for (result <- results)
           parsetrees = parsetrees :+ ptc.getParseTree(kernel.startNonterminal, kernel.grammar.startParam, result, 0, input.size)
+        ptc.fillCycles()
         Left(parsetrees)
       case Right(k) => 
         Right(k) 
