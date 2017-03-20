@@ -6,9 +6,9 @@ lazy val root = project.in(file(".")).aggregate(llJS, llJVM).
 
 lazy val ll = crossProject.in(file(".")).
   settings(
-    name := "LocalLexing",
-    organization := "net.locallexing",
-    version := "0.1-SNAPSHOT",
+    name := "LocalLexing Prototype",
+    organization := "net.proofpeer",
+    version := "0.2-SNAPSHOT",
     scalaVersion := "2.12.0",
     scalacOptions += "-deprecation"
   )

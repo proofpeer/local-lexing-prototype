@@ -1,18 +1,18 @@
-package com.locallexing.kernel
+package net.proofpeer.locallexing.kernel
 
-sealed trait ParseTree {
+sealed trait ParseTree[P] {
   def symbol : Grammar.Symbol
   def span : (Int, Int)
-  def input : Domain.V
-  def output : Domain.V
+  def input : P
+  def output : P
   def hasAmbiguities : Boolean
-  def ambiguities : List[ParseTree.AmbiguousNode]
+  def ambiguities : List[ParseTree.AmbiguousNode[P]]
   def countTrees : Int
 }
 
 final object ParseTree {
 
-  final case class AmbiguousNode(symbol : Grammar.NS, span : (Int, Int), alternatives : Vector[NonterminalNode], input : Domain.V, output : Domain.V) extends ParseTree 
+  final case class AmbiguousNode[P](symbol : Grammar.NS, span : (Int, Int), alternatives : Vector[NonterminalNode[P]], input : P, output : P) extends ParseTree[P]
   {
     def hasAmbiguities = true
     def ambiguities = List(this)
@@ -23,7 +23,7 @@ final object ParseTree {
     }
   }
 
-  final case class NonterminalNode(symbol : Grammar.NS, ruleindex : Int, span : (Int, Int), rhs : Vector[ParseTree], input : Domain.V, output : Domain.V) extends ParseTree {
+  final case class NonterminalNode[P](symbol : Grammar.NS, ruleindex : Int, span : (Int, Int), rhs : Vector[ParseTree[P]], input : P, output : P) extends ParseTree[P] {
     lazy val hasAmbiguities = rhs.exists(_.hasAmbiguities)
     def ambiguities = rhs.toList.flatMap(_.ambiguities)
     lazy val countTrees : Int = {
@@ -33,25 +33,25 @@ final object ParseTree {
     }
   }
 
-  final case class TerminalNode(symbol : Grammar.TS, span : (Int, Int), input : Domain.V, output : Domain.V) extends ParseTree {
+  final case class TerminalNode[P](symbol : Grammar.TS, span : (Int, Int), input : P, output : P) extends ParseTree[P] {
     def hasAmbiguities = false
     def ambiguities = List()
     def countTrees : Int = 1
   }
 
-  def label[CHAR](grammar : Grammar[CHAR], tree : ParseTree) : String = {
+  def label[CHAR, P](grammar : Grammar[CHAR, P], tree : ParseTree[P]) : String = {
     val name = grammar.nameOf(tree.symbol)
-    if (tree.input != Domain.V.NIL || tree.output != Domain.V.NIL) {
-      name + "("+tree.input+","+tree.output+")"
-    } else name
+    //if (tree.input != Domain.V.NIL || tree.output != Domain.V.NIL) {
+    name + "("+tree.input+","+tree.output+")"
+    //} else name
   }
 
-  type Path = Vector[TerminalNode]
-  type Paths = Set[Path]
-  type Trees = Vector[ParseTree]
+  type Path[P] = Vector[TerminalNode[P]]
+  type Paths[P] = Set[Path[P]]
+  type Trees[P] = Vector[ParseTree[P]]
 
-  private def combinePaths(A : Paths, B : Paths) : Paths = {
-    var result : Paths = Set()
+  private def combinePaths[P](A : Paths[P], B : Paths[P]) : Paths[P] = {
+    var result : Paths[P] = Set()
     for (a <- A) {
       for (b <- B) {
         result = result + (a ++ b)
@@ -60,17 +60,17 @@ final object ParseTree {
     result
   }
 
-  def collectPaths(tree : ParseTree) : Paths = {
+  def collectPaths[P](tree : ParseTree[P]) : Paths[P] = {
     tree match {
-      case node : AmbiguousNode =>
-        var paths : Paths = Set()
+      case node : AmbiguousNode[P] =>
+        var paths : Paths[P] = Set()
         for (alternative <- node.alternatives) {
           paths = paths ++ collectPaths(alternative)
         }
         paths
-      case node : TerminalNode => Set(Vector(node))
-      case node : NonterminalNode =>
-        var paths : Paths = Set(Vector())
+      case node : TerminalNode[P] => Set(Vector(node))
+      case node : NonterminalNode[P] =>
+        var paths : Paths[P] = Set(Vector())
         for (child <- node.rhs) {
           val childPaths = collectPaths(child)
           paths = combinePaths(paths, childPaths)
@@ -79,8 +79,8 @@ final object ParseTree {
     }
   }
 
-  private def appendTrees(A : Vector[Vector[ParseTree]], B : Trees) : Vector[Vector[ParseTree]] = {
-    var result : Vector[Vector[ParseTree]] = Vector()
+  private def appendTrees[P](A : Vector[Vector[ParseTree[P]]], B : Trees[P]) : Vector[Vector[ParseTree[P]]] = {
+    var result : Vector[Vector[ParseTree[P]]] = Vector()
     for (a <- A) {
       for (b <- B) {
         result = result :+ (a :+ b)
@@ -89,18 +89,18 @@ final object ParseTree {
     result
   }  
 
-  def collectTrees(tree : ParseTree) : Trees = {
+  def collectTrees[P](tree : ParseTree[P]) : Trees[P] = {
     tree match {
-      case node : AmbiguousNode =>
-        var trees : Trees = Vector()
+      case node : AmbiguousNode[P] =>
+        var trees : Trees[P] = Vector()
         for (alternative <- node.alternatives) {
           trees = trees ++ collectTrees(alternative)
         }
         trees
-      case node : TerminalNode => 
+      case node : TerminalNode[P] => 
         Vector(node)
-      case node : NonterminalNode =>
-        var trees : Vector[Vector[ParseTree]] = Vector(Vector())
+      case node : NonterminalNode[P] =>
+        var trees : Vector[Vector[ParseTree[P]]] = Vector(Vector())
         for (child <- node.rhs) {
           val childTrees = collectTrees(child)
           trees = appendTrees(trees, childTrees)
@@ -109,8 +109,9 @@ final object ParseTree {
     }
   }
 
-  def printPath[CHAR](grammar : Grammar[CHAR], input : Input[CHAR], path : Path) : String = {
-    def printTerminalNode(node : TerminalNode) : String = {
+  def printPath[CHAR, P](grammar : Grammar[CHAR, P], input : Input[CHAR], path : Path[P]) : String = {
+    def printTerminalNode(node : TerminalNode[P]
+      ) : String = {
       val id = label(grammar, node)
       val text = input.print(node.span._1, node.span._2 - node.span._1)
       id + "[\"" + text + "\"]"

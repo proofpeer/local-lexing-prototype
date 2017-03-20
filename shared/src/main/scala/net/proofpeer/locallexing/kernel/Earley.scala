@@ -1,30 +1,58 @@
-package com.locallexing.kernel
+package net.proofpeer.locallexing.kernel
+
 
 object Earley {
 
-  final case class SymbolData(val firstIndexIncl : Int, val lastIndexExcl : Int, val input : Domain.V, val output : Domain.V) {
-    def span : (Int, Int) = (firstIndexIncl, lastIndexExcl)
+  final class ItemEnv[P](val size : Int, val dot : Int, values : Vector[P]) extends Grammar.Environment[P] {
+    def inputAt(index : Int) : P = {
+      if (index == 0) values(index) 
+      else if (index > 0 && index <= dot) values(2*index - 1)
+      else throw new RuntimeException("invalid call inputAt(" + index+ ")")
+    }
+    def outputAt(index : Int) : P = {
+      if (index > 0 && index <= dot) values(2 * index) 
+      else throw new RuntimeException("invalid call outputAt(" + index + ")")
+    }
   }
 
-  final case class Item(val coreItemId : Int, val data : SymbolData, val children : Vector[SymbolData]) extends Domain.Environment
+  final case class Item[P](coreItemId : Int, size : Int, values : Vector[P], indices : Vector[Int]) 
   {
 
-    def param : Domain.V = data.input
+    def param : P = values(0)
 
-    def origin : Int = data.firstIndexIncl
+    def origin : Int = indices(0)
 
-    def inputAt(index : Int) : Domain.V = {
-      if (index == 0) data.input else children(index - 1).input
+    def dot : Int = indices.length - 1
+
+    def inAt(index : Int) : P = {
+      if (index == 0) values(index) else values(2*index - 1)
     }
 
-    def outputAt(index : Int) : Domain.V = {
-      children(index - 1).output
+    def outAt(index : Int) : P = {
+      if (index == 0) values(2 * dot + 1) else values(2 * index)
     }
 
-    override def toString : String = {
-      val p = if (param == Domain.V.NIL) "" else "{" + param + "}"
+    def result : P = outAt(0)
+
+    def nextParam : P = inAt(dot + 1)
+
+    def mkNextItem(nextCoreItem : CoreItem[P], k : Int, out : P) : Option[Item[P]] = {
+      val intermediateValues = values :+ out
+      val env = new ItemEnv(size, dot + 1, intermediateValues)
+      nextCoreItem.nextFun(env) match {
+        case None => None
+        case Some(in) => Some(Item[P](nextCoreItem.id, size, intermediateValues :+ in, indices :+ k))
+      }
+    }
+
+    def span : (Int, Int) = (indices.head, indices.last)
+
+    def spanOf(index : Int) : (Int, Int) = (indices(index - 1), indices(index))
+
+    /*override def toString : String = {
+      val p = "{" + param + "}"
       "Earley.Item[coreItemId="+coreItemId+p+", origin="+origin+"]"
-    }
+    }*/
 
   }
 
@@ -33,37 +61,39 @@ object Earley {
   }
 
 
-  trait CoreItem {
+  trait CoreItem[P] {
+
+    def id : Int
 
     def nextSymbol : Option[Grammar.Symbol]
+
+    def ruleIndex : Int
 
     def dot : Int
 
     def nonterminal : Grammar.NS
 
-    def mkItem(data : SymbolData, children : Vector[SymbolData]) : Option[Item]
+    def nextFun : Grammar.EnvFun[P]
 
+    /* This only makes sense for dot == 0 */
+    def mkInitialItem(k : Int, param : P) : Option[Item[P]]
     
     // the following functions all fail if there is no appropriate next symbol
 
-    def predictedCoreItems : Vector[CoreItem]
+    def predictedCoreItems : Vector[CoreItem[P]]
 
-    def nextCoreItem : CoreItem
-
-    def nextSymbolParam(item : Earley.Item) : Domain.V
-
-    def ruleIndex : Int
+    def nextCoreItem : CoreItem[P]
 
   }
 
-  final class Kernel[CHAR](val grammar : Grammar[CHAR]) {
+  final class Kernel[CHAR, P](val grammar : Grammar[CHAR, P]) {
 
     import Grammar._
 
-    private def computeCoreItems() : (Map[Int, (Int, Int, Int)], Map[(Int, Int, Int), Int], Map[Int, CoreItem]) = {
+    private def computeCoreItems() : (Map[Int, (Int, Int, Int)], Map[(Int, Int, Int), Int], Map[Int, CoreItem[P]]) = {
       var coreItemIds : Map[Int, (Int, Int, Int)] = Map()
       var coreItemIdsRev : Map[(Int, Int, Int), Int] = Map()
-      var coreItems : Map[Int, CoreItem] = Map()
+      var coreItems : Map[Int, CoreItem[P]] = Map()
       var nextId = 0
       var n = 0
       for (nonterminal <- grammar.nonterminals) {
@@ -82,7 +112,7 @@ object Earley {
         val ns = NS(n)
         val nonterminal = grammar.get(ns)
         val rule = nonterminal.rules(r)
-        val (nextSymbol, nextExpr) =
+        val (nextSymbol, nextFun) =
           if (dot == rule.rhs.size) (None, rule.out)
           else (Some(rule.rhs(dot)._1), rule.rhs(dot)._2)
         var predicted : Vector[Int] = Vector()
@@ -99,7 +129,7 @@ object Earley {
             nextCoreItemId = coreItemId + 1
           case None =>
         }
-        val coreItem = CI(coreItemId, ns, r, dot, nextSymbol, nextExpr, rule.guard, predicted, nextCoreItemId)
+        val coreItem = CI(coreItemId, ns, r, rule.rhs.size, dot, nextSymbol, nextFun, predicted, nextCoreItemId)
         coreItems = coreItems + (coreItemId -> coreItem)
       }
       (coreItemIds, coreItemIdsRev, coreItems)
@@ -107,38 +137,27 @@ object Earley {
 
     private val (coreItemIds, coreItemIdsRev, coreItems) = computeCoreItems()
 
-    private case class CI(id : Int, nonterminal : NS, ruleIndex : Int, dot : Int, nextSymbol : Option[Symbol], nextExpr : Domain.Expr, guard : Domain.Expr, 
-      predictedCoreItemIds : Vector[Int], nextCoreItemId : Int) extends CoreItem 
+    private case class CI(id : Int, nonterminal : NS, ruleIndex : Int, size : Int, dot : Int, nextSymbol : Option[Symbol], 
+      nextFun : EnvFun[P], predictedCoreItemIds : Vector[Int], nextCoreItemId : Int) extends CoreItem[P] 
     {
 
-      lazy val predictedCoreItems : Vector[CoreItem] = predictedCoreItemIds.map(id => coreItems(id))
+      lazy val predictedCoreItems : Vector[CoreItem[P]] = predictedCoreItemIds.map(id => coreItems(id))
 
-      lazy val nextCoreItem : CoreItem = coreItems(nextCoreItemId)
+      lazy val nextCoreItem : CoreItem[P] = coreItems(nextCoreItemId)
 
-      def nextSymbolParam(item : Earley.Item) : Domain.V = Domain.Expr.eval(item, nextExpr)
-      
-      def mkItem(data : SymbolData, children : Vector[SymbolData]) : Option[Item] = {
-        val item = Earley.Item(id, data, children)
-        if (children.size == 0) {
-          Domain.Expr.eval(item, guard) match {
-            case Domain.V.BOOL(allow) =>
-              if (!allow) return None 
-            case _ => throw new RuntimeException("internal error in mkItem")
-          }
-        }
-        nextSymbol match {
-          case None =>
-            val output = Domain.Expr.eval(item, nextExpr)
-            Some(Earley.Item(id, SymbolData(data.firstIndexIncl, data.lastIndexExcl, data.input, output), children))
-          case _ => Some(item)
+      def mkInitialItem(k : Int, param : P) : Option[Item[P]] = {
+        val env = new ItemEnv(size, 0, Vector(param))
+        nextFun(env) match {
+          case None => None
+          case Some(q) => Some(Item(id, size, Vector(param, q), Vector(k)))
         }
       }
 
     }
 
-    def coreItem(coreItemId : Int) : CoreItem = coreItems(coreItemId)
+    def coreItem(coreItemId : Int) : CoreItem[P] = coreItems(coreItemId)
 
-    def coreItemOf(item : Earley.Item) : CoreItem = coreItem(item.coreItemId)
+    def coreItemOf(item : Earley.Item[P]) : CoreItem[P] = coreItem(item.coreItemId)
 
     def numCoreItems : Int = coreItems.size
 
@@ -148,14 +167,22 @@ object Earley {
 
 }
 
-final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
+
+final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
 
   import Earley._
   import Grammar._
 
-  type Bin = Set[Item]
+  type Bin = Set[Item[P]]
 
   type Bins = Array[Bin]
+
+  def addItem(bin : Bin, item : Item[P]) : Bin = {
+    if (bin.contains(item)) bin else {
+      //println("adding item: " + item)
+      bin + item
+    }
+  }
   
   def Init() : Bin = {
     debug("Init")
@@ -164,8 +191,8 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
     for (coreItemId <- 0 until numCoreItems) {
       val coreItem = kernel.coreItem(coreItemId)
       if (coreItem.dot == 0 && coreItem.nonterminal == kernel.startNonterminal) {
-        coreItem.mkItem(SymbolData(0, 0, Domain.V.NIL, null), Vector()) match {
-          case Some(item) => bin = bin + item
+        coreItem.mkInitialItem(0, kernel.grammar.startParam) match {
+          case Some(item) => bin = addItem(bin, item)
           case None =>
         }
       }
@@ -185,10 +212,10 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
       val coreItem = kernel.coreItemOf(item)
       coreItem.nextSymbol match {
         case Some(ns : NS) => 
-          val param = coreItem.nextSymbolParam(item)
+          val param = item.nextParam
           for (predictedCoreItem <- coreItem.predictedCoreItems) {
-            predictedCoreItem.mkItem(SymbolData(k, k, param, null), Vector()) match {
-              case Some(item) => bin = bin + item
+            predictedCoreItem.mkInitialItem(k, param) match {
+              case Some(item) => bin = addItem(bin, item)
               case None =>
             }
           }
@@ -212,16 +239,13 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
           for (srcItem <- bins(item.origin)) {
             val srcCoreItem = kernel.coreItemOf(srcItem)
             if (srcCoreItem.nextSymbol == nextSymbol) {
-              if (srcCoreItem.nextSymbolParam(srcItem) == param) {
-                val nextCoreItem = srcCoreItem.nextCoreItem
-                val data = srcItem.data
-                nextCoreItem.mkItem(SymbolData(data.firstIndexIncl, k, data.input, data.output), srcItem.children :+ item.data) match {
-                  case Some(item) => bin = bin + item
-                  case None => throw new RuntimeException("internal error")
+              if (srcItem.nextParam == param) {
+                srcItem.mkNextItem(srcCoreItem.nextCoreItem, k, item.result) match {
+                  case None =>
+                  case Some(item) => bin = addItem(bin, item) 
                 }
               }
             }
-
           }
         case _ =>
       }
@@ -230,7 +254,7 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
     bin.size != oldSize
   }
 
-  def Tokens(input : Input[CHAR], bins : Bins, prevTokens : Tokens, k : Int) : Tokens = {
+  def Tokens(input : Input[CHAR], bins : Bins, prevTokens : Tokens[P], k : Int) : Tokens[P] = {
     var tokens = prevTokens
     val bin = bins(k)
     val grammar = kernel.grammar
@@ -238,26 +262,23 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
       val coreItem = kernel.coreItemOf(item)
       coreItem.nextSymbol match {
         case Some(ts : TS) =>
-          val param = coreItem.nextSymbolParam(item)
+          val param = item.nextParam
           val x = (ts, param)
           tokens.get(x) match {
             case None =>
-              grammar.get(ts).lexer.lex(input, k, param) match {
-                case Some(result) =>
-                  tokens = tokens + (x -> result)
-                case None =>
-              }
+              val result = grammar.get(ts).lexer.lex(input, k, param)
+              tokens = tokens + (x -> result)
             case _ =>
           }
         case _ =>
       }
     }
     tokens = grammar.selector.select(input, k, prevTokens, tokens)
-    debug("found tokens at " + k + ":" + tokens)
+    debug("found tokens at " + k + ":" + tokens) 
     tokens
   }
 
-  def Scan(bins : Bins, tokens : Tokens, k : Int) : Boolean = {
+  def Scan(bins : Bins, tokens : Tokens[P], k : Int) : Boolean = {
     debug("scan " + k + binSize(bins, k))
     val bin = bins(k)
     val oldSize = bin.size
@@ -265,24 +286,27 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
       val coreItem = kernel.coreItemOf(item)
       coreItem.nextSymbol match {
         case Some(ts : TS) =>
-          val param = coreItem.nextSymbolParam(item)
+          val param = item.nextParam
           val x = (ts, param)
           tokens.get(x) match {
             case None =>
-            case Some((len, out)) =>
-              val nextCoreItem = coreItem.nextCoreItem
-              val child = SymbolData(k, k + len, param, out)
-              val data = item.data
-              val nextItem = nextCoreItem.mkItem(SymbolData(data.firstIndexIncl, k + len, data.input, data.output), item.children :+ child).get
-              bins(k + len) = bins(k + len) + nextItem
+            case Some(result) =>
+              for ((len, out) <- result) {
+                val nextCoreItem = coreItem.nextCoreItem
+                item.mkNextItem(nextCoreItem, k + len, out) match {
+                  case None =>
+                  case Some(nextItem) => 
+                    bins(k + len) = addItem(bins(k + len), nextItem)
+                }
+              }
           }
         case _ =>
       }
-    }
+    } 
     oldSize != bins(k).size
   }
 
-  def Pi(bins : Bins, tokens : Tokens, k : Int) : Boolean = {
+  def Pi(bins : Bins, tokens : Tokens[P], k : Int) : Boolean = {
     var changed = false
     var oldChanged = false
     do {
@@ -296,7 +320,7 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
   }
 
   def computeBin(input : Input[CHAR], bins : Bins, k : Int) {
-    var tokens : Tokens = Map()
+    var tokens : Tokens[P] = Map()
     Pi(bins, tokens, k)
     while (true) {
       tokens = Tokens(input, bins, tokens, k)
@@ -305,10 +329,13 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
   }
 
   def wasRecognized(bin : Bin) : Boolean = {
+    val grammar = kernel.grammar
     for (item <- bin) {
       if (item.origin == 0) {
         val coreItem = kernel.coreItemOf(item)
-        if (coreItem.nonterminal == kernel.startNonterminal && coreItem.nextSymbol == None)
+        if (coreItem.nonterminal == kernel.startNonterminal && coreItem.nextSymbol == None 
+          && item.param == grammar.startParam 
+          && item.result == grammar.endParam)
           return true
       }
     }
@@ -339,11 +366,11 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
   private class ParseTreeConstruction(bins : Array[Bin]) {
 
     import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
-    private val cache : MutableMap[(Grammar.NS, Domain.V, Domain.V, Int, Int), ParseTree] = MutableMap()
-    private val visiting : MutableSet[(Grammar.NS, Domain.V, Domain.V, Int, Int)] = MutableSet()
+    private val cache : MutableMap[(Grammar.NS, P, P, Int, Int), ParseTree[P]] = MutableMap()
+    private val visiting : MutableSet[(Grammar.NS, P, P, Int, Int)] = MutableSet()
 
-    def getParseTree(nonterminal : Grammar.NS, param : Domain.V, result : Domain.V,
-      startPosition : Int, endPosition : Int) : ParseTree = 
+    def getParseTree(nonterminal : Grammar.NS, param : P, result : P,
+      startPosition : Int, endPosition : Int) : ParseTree[P] = 
     {
       val key = (nonterminal, param, result, startPosition, endPosition)
       cache.get(key) match {
@@ -363,40 +390,41 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
       * @param startPosition the start position (inclusive)
       * @param endPosition the end position (exclusive)
       */
-    def constructParseTree(nonterminal : Grammar.NS, param : Domain.V, result : Domain.V, 
-      startPosition : Int, endPosition : Int) : ParseTree = 
+    def constructParseTree(nonterminal : Grammar.NS, param : P, result : P, 
+      startPosition : Int, endPosition : Int) : ParseTree[P] = 
     {
       import ParseTree._
       val grammar = kernel.grammar
       val bin = bins(endPosition)
-      var foundItems : List[Item] = List()
+      var foundItems : List[Item[P]] = List()
       for (item <- bin) {
         val coreItem = kernel.coreItemOf(item)
         if (coreItem.nonterminal == nonterminal && coreItem.nextSymbol == None && 
-          item.data.input == param && item.data.output == result && item.origin == startPosition) 
+          item.origin == startPosition && item.param == param && item.result == result) 
         {
           foundItems = item :: foundItems
         }
       }
-      def mkTree(foundItem : Item) : NonterminalNode = {
+      def mkTree(foundItem : Item[P]) : NonterminalNode[P] = {
         val coreItem = kernel.coreItemOf(foundItem)
         val rule = grammar.get(coreItem.nonterminal).rules(coreItem.ruleIndex)
-        var subtrees = new Array[ParseTree](rule.rhs.size)
+        var subtrees = new Array[ParseTree[P]](rule.rhs.size)
         var hasAmbiguities = false
         for (i <- 0 until subtrees.size) {
           val symbol = rule.rhs(i)._1
-          val child = foundItem.children(i)
+          val child = i + 1
+          val span = foundItem.spanOf(child)
           symbol match {
             case ts : TS => 
-              subtrees(i) = TerminalNode(ts, child.span, child.input, child.output)
+              subtrees(i) = TerminalNode[P](ts, span, foundItem.inAt(child), foundItem.outAt(child))
             case ns : NS =>
-              subtrees(i) = getParseTree(ns, child.input, child.output, child.firstIndexIncl, child.lastIndexExcl)
+              subtrees(i) = getParseTree(ns, foundItem.inAt(child), foundItem.outAt(child), span._1, span._2)
               if (subtrees(i) == null) return null
           }
           hasAmbiguities = hasAmbiguities || subtrees(i).hasAmbiguities
         }
-        NonterminalNode(coreItem.nonterminal, coreItem.ruleIndex, foundItem.data.span, subtrees.toVector, 
-          foundItem.data.input, foundItem.data.output)
+        NonterminalNode[P](coreItem.nonterminal, coreItem.ruleIndex, foundItem.span, subtrees.toVector, 
+          foundItem.param, foundItem.result)
       }
       foundItems match {
         case List() => throw new RuntimeException("cannot construct parse tree for " + 
@@ -406,20 +434,20 @@ final class Earley[CHAR](kernel : Earley.Kernel[CHAR]) {
           val trees = foundItems.map(mkTree _).toVector.filter(t => t != null)
           val node = trees.head
           if (trees.size == 1) node
-          else AmbiguousNode(node.symbol, node.span, trees, node.input, node.output)
+          else AmbiguousNode[P](node.symbol, node.span, trees, node.input, node.output)
       }
     } 
 
   }
 
-  def parse(input : Input[CHAR]) : Either[ParseTree, Int] = {
+  def parse(input : Input[CHAR]) : Either[ParseTree[P], Int] = {
     recognize(input) match {
       case Left(bins) =>
         val ptc = new ParseTreeConstruction(bins)
-        Left(ptc.getParseTree(kernel.startNonterminal, Domain.V.NIL, Domain.V.NIL, 0, input.size))
+        Left(ptc.getParseTree(kernel.startNonterminal, kernel.grammar.startParam, kernel.grammar.endParam, 0, input.size))
       case Right(k) => 
         Right(k) 
     }
-  }   
+  } 
 
 }
