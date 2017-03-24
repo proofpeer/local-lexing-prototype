@@ -24,6 +24,10 @@ final object TypeExpr {
 
   final case class TVector(elem : TypeExpr) extends TypeExpr
 
+  final case class TSet(elem : TypeExpr) extends TypeExpr
+
+  final case class TMap(domain : TypeExpr, target : TypeExpr) extends TypeExpr
+
   final case class TCustom(name : Name) extends TypeExpr
 
   type TypeEnv = Name => TypeExpr
@@ -49,6 +53,9 @@ final object TypeExpr {
             TRecord(keys.map(k => (k, j(elems1(k), elems2(k)))).toMap)
           } else TAny
         case (TVector(elem1), TVector(elem2)) => TVector(j(elem1, elem2))
+        case (TSet(elem1), TSet(elem2)) => TSet(j(elem1, elem2))
+        case (TMap(domain1, target1), TMap(domain2, target2)) => 
+          TMap(j(domain1, domain2), j(target1, target2))
         case (TCustom(name1), TCustom(name2)) => 
           if (name1 == name2) type1 else j(typeEnv(name1), typeEnv(name2))
         case (TCustom(name), t) => j(typeEnv(name), t)
@@ -79,6 +86,10 @@ final object TypeExpr {
           } else false
         case (TVector(elem1), TVector(elem2)) => 
           cmp(elem1, elem2)
+        case (TSet(elem1), TSet(elem2)) =>
+          cmp(elem1, elem2)
+        case (TMap(domain1, target1), TMap(domain2, target2)) =>
+          cmp(domain1, domain2) && cmp(target1, target2)
         case (TCustom(name1), TCustom(name2)) => 
           if (name1 == name2) true
           else cmp(typeEnv(name1), typeEnv(name2))
