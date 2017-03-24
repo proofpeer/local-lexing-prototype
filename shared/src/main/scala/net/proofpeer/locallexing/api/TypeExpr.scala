@@ -90,6 +90,10 @@ final object TypeExpr {
     cmp(ty1, ty2)
   }
 
+  def isSubtype(typeEnv : TypeEnv, subty : TypeExpr, ty : TypeExpr) : Boolean = {
+    typesAreEqual(typeEnv, join(typeEnv, subty, ty), ty)
+  }
+
   case class TypingError(error : String) extends RuntimeException
 
   def typeValueExpr(typeEnv : TypeEnv, env : Env, value : ValueExpr) : TypeExpr = {
@@ -111,6 +115,14 @@ final object TypeExpr {
   }
 
   def typeLexerExpr(typeEnv : TypeEnv, env : Env, lexer : LexerExpr) : TypeExpr = {
+    def typek(obj : String, lexer : LexerExpr, k : ValueExpr) : TypeExpr = {
+      val ty = typeit(env, lexer)
+      val kty = typeValueExpr(typeEnv, env, k)
+      if (!typesAreEqual(typeEnv, kty, TInteger)) 
+        throw TypingError(obj + " value must be an integer")
+      ty
+
+    }
     def typeit(env : Env, lexer : LexerExpr) : TypeExpr = {
       lexer match {
         case LexerExpr.Fail => TNone
@@ -151,9 +163,32 @@ final object TypeExpr {
               if (none) TNone
               else ty
           }
-        case LexerExpr.Optional(lexer) =>
-          TVector(typeit(env, lexer))
-        case _ => throw new RuntimeException("not implemented yet")
+        case LexerExpr.Optional(lexer) => TVector(typeit(env, lexer))
+        case LexerExpr.Repeat(lexer) => TVector(typeit(env, lexer))
+        case LexerExpr.Repeat1(lexer) => TVector(typeit(env, lexer))
+        case LexerExpr.And(lexer) => typeit(env, lexer)
+        case LexerExpr.Not(lexer) => 
+          val _ = typeit(env, lexer)
+          TUnit
+        case LexerExpr.ReverseAnd(lexer) => typeit(env, lexer)
+        case LexerExpr.ReverseNot(lexer) =>
+          val _ = typeit(env, lexer)
+          TUnit
+        case LexerExpr.Word(lexer) => typeit(env, lexer)
+        case LexerExpr.Line(lexer) => typeit(env, lexer)
+        case LexerExpr.Paragraph(lexer) => typeit(env, lexer)
+        case LexerExpr.ColumnGeq(lexer, k) => typek("column", lexer, k)
+        case LexerExpr.ColumnLeq(lexer, k) => typek("column", lexer, k)
+        case LexerExpr.RowGeq(lexer, k) => typek("row", lexer, k)
+        case LexerExpr.RowLeq(lexer, k) => typek("row", lexer, k)
+        case LexerExpr.Call(name, param) => 
+          env._3.get(name) match {
+            case None => throw TypingError("unknown call target '" + name + "'")
+            case Some((src, dest)) =>
+              val ty = typeValueExpr(typeEnv, env, param)
+              if (isSubtype(typeEnv, ty, src)) dest
+              else throw TypingError("illegal argument to '" + name +"'")  
+          }
       }
     }
     typeit(env, lexer)
