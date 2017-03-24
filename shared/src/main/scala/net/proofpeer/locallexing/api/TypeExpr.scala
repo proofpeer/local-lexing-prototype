@@ -20,7 +20,7 @@ final object TypeExpr {
     if (elems.size < 2) throw new RuntimeException("tuple must have 2 elements or more")
   }
 
-  final case class TRecord(elems : Map[String, TypeExpr]) extends TypeExpr
+  final case class TRecord(fields : Map[String, TypeExpr]) extends TypeExpr
 
   final case class TVector(elem : TypeExpr) extends TypeExpr
 
@@ -47,10 +47,10 @@ final object TypeExpr {
           if (elems1.size == elems2.size) {
             TTuple((0 until elems1.size).map(i => j(elems1(i), elems2(i))).toVector)
           } else TAny
-        case (TRecord(elems1), TRecord(elems2)) =>
-          val keys = elems1.keys
-          if (keys == elems2.keys) {
-            TRecord(keys.map(k => (k, j(elems1(k), elems2(k)))).toMap)
+        case (TRecord(fields1), TRecord(fields2)) =>
+          val keys = fields1.keys
+          if (keys == fields2.keys) {
+            TRecord(keys.map(k => (k, j(fields1(k), fields2(k)))).toMap)
           } else TAny
         case (TVector(elem1), TVector(elem2)) => TVector(j(elem1, elem2))
         case (TSet(elem1), TSet(elem2)) => TSet(j(elem1, elem2))
@@ -79,10 +79,10 @@ final object TypeExpr {
           if (elems1.size == elems2.size) {
             (0 until elems1.size).forall(i => cmp(elems1(i), elems2(i)))
           } else false
-        case (TRecord(elems1), TRecord(elems2)) =>
-          val keys = elems1.keys
-          if (keys == elems2.keys) {
-            keys.forall(k => cmp(elems1(k), elems2(k)))
+        case (TRecord(fields1), TRecord(fields2)) =>
+          val keys = fields1.keys
+          if (keys == fields2.keys) {
+            keys.forall(k => cmp(fields1(k), fields2(k)))
           } else false
         case (TVector(elem1), TVector(elem2)) => 
           cmp(elem1, elem2)
@@ -112,6 +112,8 @@ final object TypeExpr {
       value match {
         case ValueExpr.VUnit => TUnit
         case ValueExpr.VThis => env._1
+        case ValueExpr.VAbort => TNone
+        case ValueExpr.VFail => TNone
         case ValueExpr.VVar(varname) => 
           env._2.get(varname) match {
             case None => throw TypingError("invalid reference to '" + varname + "'")
@@ -120,6 +122,20 @@ final object TypeExpr {
         case _ : ValueExpr.VInteger => TInteger
         case _ : ValueExpr.VBoolean => TBoolean
         case _ : ValueExpr.VString => TString
+        case ValueExpr.VTuple(elems) => TTuple(elems.map(typeit _))
+        case ValueExpr.VRecord(fields) => TRecord(fields.mapValues(typeit _))
+        case ValueExpr.VSet(elems) => 
+          TSet(elems.foldLeft(TNone : TypeExpr){ 
+            case (t, v) => join(typeEnv, t, typeit(v))
+          })
+        case ValueExpr.VMap(mappings) =>
+          var domain : TypeExpr = TNone
+          var target : TypeExpr = TNone
+          for ((d, t) <- mappings) {
+            domain = join(typeEnv, domain, typeit(d))
+            target = join(typeEnv, target, typeit(t))
+          }
+          TMap(domain, target)
       }
     }
     typeit(value)
