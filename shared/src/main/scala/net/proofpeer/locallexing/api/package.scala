@@ -2,13 +2,28 @@ package net.proofpeer.locallexing
 
 package object api {
 
-  type ModuleName = Vector[String]
+  trait Annotation
 
-  type Name = (ModuleName, String)
+  abstract class Annotated {
+    private var annotation_store : Option[Annotation] = null
+    def annotation : Option[Annotation] = {
+      if (annotation_store == null) None else annotation_store
+    }
+    def sealAnnotation(a : Option[Annotation]) {
+      if (a == null || annotation_store != null) throw new RuntimeException("error sealing Annotation")
+      annotation_store = a
+    }
+  }
+
+  case class NameSegment(s : String) extends Annotated
+
+  case class ModuleName(segments : Vector[NameSegment]) extends Annotated
+
+  case class Name(moduleName : ModuleName, localName : NameSegment) extends Annotated
 
   type FunType = (TypeExpr, TypeExpr)
 
-  type VarName = String
+  type VarName = NameSegment
 
   type Env = (TypeExpr, Map[VarName, TypeExpr], Map[Name, FunType])
 

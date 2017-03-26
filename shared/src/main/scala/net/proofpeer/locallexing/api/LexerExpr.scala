@@ -3,13 +3,13 @@ package net.proofpeer.locallexing.api
 import net.proofpeer.locallexing.utils.Range
 import net.proofpeer.locallexing.utils.StringUtils
 
-sealed trait LexerExpr
+sealed abstract class LexerExpr extends Annotated
 
 final object LexerExpr {
 
-  final case object Fail extends LexerExpr
+  final case class Fail() extends LexerExpr
 
-  final case object Empty extends LexerExpr
+  final case class Empty() extends LexerExpr
 
   final case class Character(min : ValueExpr, max : ValueExpr) extends LexerExpr
 
@@ -62,20 +62,20 @@ final object LexerExpr {
 
   def string(s : String) : LexerExpr = {
     StringUtils.codePoints(s) match {
-      case Vector() => Empty
+      case Vector() => Empty()
       case Vector(c) => char(c)
       case cs => Word(Sequence(cs.map(c => (char(c), None)).toVector, None))
     }
   }
 
   def seq(lexers : LexerExpr*) : LexerExpr = {
-    if (lexers.isEmpty) Empty
+    if (lexers.isEmpty) Empty()
     else if (lexers.tail.isEmpty) lexers.head
     else Sequence(lexers.map(l => (l, None)).toVector, None)
   }
 
   def choice(lexers : LexerExpr*) : LexerExpr = {
-    if (lexers.isEmpty) Fail
+    if (lexers.isEmpty) Fail()
     else if (lexers.tail.isEmpty) lexers.head
     else {
       var lexer = lexers.head

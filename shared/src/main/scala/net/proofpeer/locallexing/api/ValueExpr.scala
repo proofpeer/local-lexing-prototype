@@ -1,18 +1,18 @@
 package net.proofpeer.locallexing.api
 
-sealed trait ValueExpr
+sealed abstract class ValueExpr extends Annotated
 
 final object ValueExpr {
 
-  final case object VUnit extends ValueExpr
+  final case class VUnit() extends ValueExpr
 
-  final case object VThis extends ValueExpr
+  final case class VThis() extends ValueExpr
 
-  final case object VFail extends ValueExpr
+  final case class VFail() extends ValueExpr
 
   final case class VVar(name : VarName) extends ValueExpr
 
-  final case object VAbort extends ValueExpr
+  final case class VAbort() extends ValueExpr
 
   final case class VInteger(i: BigInt) extends ValueExpr
 
@@ -26,9 +26,18 @@ final object ValueExpr {
 
   final case class VRecord(fields : Map[String, ValueExpr]) extends ValueExpr 
 
+  final case class VVector(elems : Vector[ValueExpr]) extends ValueExpr
+
   final case class VSet(elems : Vector[ValueExpr]) extends ValueExpr
 
   final case class VMap(mappings : Vector[(ValueExpr, ValueExpr)]) extends ValueExpr
 
+  final case class VIf(cond : ValueExpr, vtrue : ValueExpr, vfalse : ValueExpr) extends ValueExpr
+
+/*  final case class VEq(x : ValueExpr, y : ValueExpr) extends ValueExpr
+
+  final case class VLeq(x : ValueExpr, y : ValueExpr) extends ValueExpr
+
+  final case class VLess(x : ValueExpr, y : ValueExpr) extends ValueExpr*/
 
 }
