@@ -34,7 +34,9 @@ final object ValueExpr {
 
   final case class VIf(cond : ValueExpr, vtrue : ValueExpr, vfalse : ValueExpr) extends ValueExpr
 
-/*  final case class VEq(x : ValueExpr, y : ValueExpr) extends ValueExpr
+  //final case class VEq(x : ValueExpr, y : ValueExpr) extends ValueExpr
+
+  /*
 
   final case class VLeq(x : ValueExpr, y : ValueExpr) extends ValueExpr
 

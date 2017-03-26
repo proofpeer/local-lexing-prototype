@@ -8,8 +8,6 @@ final object TypeExpr {
 
   final case class TNone() extends TypeExpr
 
-  final case class TUnit() extends TypeExpr
-
   final case class TInteger() extends TypeExpr
 
   final case class TBoolean() extends TypeExpr
@@ -17,7 +15,7 @@ final object TypeExpr {
   final case class TString() extends TypeExpr
 
   final case class TTuple(elems : Vector[TypeExpr]) extends TypeExpr {
-    if (elems.size < 2) throw new RuntimeException("tuple must have 2 elements or more")
+    if (elems.size == 1) throw new RuntimeException("tuple must have zero or 2 elements or more")
   }
 
   final case class TRecord(fields : Map[String, TypeExpr]) extends TypeExpr
@@ -37,7 +35,7 @@ final object TypeExpr {
 
   val tany = seal(TAny())
   val tnone = seal(TNone())
-  val tunit = seal(TUnit())
+  val tunit = seal(TTuple(Vector()))
   val tinteger = seal(TInteger())
   val tboolean = seal(TBoolean())
   val tstring = seal(TString())

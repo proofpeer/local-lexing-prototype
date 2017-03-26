@@ -29,7 +29,6 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
     (ty1, ty2) match {
       case (TNone(), TNone()) => true
       case (TAny(), TAny()) => true
-      case (TUnit(), TUnit()) => true
       case (TInteger(), TInteger()) => true
       case (TBoolean(), TBoolean()) => true
       case (TString(), TString()) => true
@@ -57,30 +56,12 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
     }
   }
 
-  def norm(ty : TypeExpr) : TypeExpr = {
-    ty
-/*    ty match {
-      case TTuple(elems) => 
-        if (elems.exists(isTNone _)) tnone else ty
-      case TRecord(fields) =>
-        if (fields.exists(f => isTNone(f._2))) tnone else ty
-      case TVector(elem) =>
-        if (isTNone(elem)) tnone else ty
-      case TSet(elem) =>
-        if (isTNone(elem)) tnone else ty
-      case TMap(domain, target) =>
-        if (isTNone(domain) || isTNone(target)) tnone else ty
-      case _ => ty
-    } */
-  } 
-
   def join(ty1 : TypeExpr, ty2 : TypeExpr) : TypeExpr = {
     (ty1, ty2) match {
       case (_ : TNone, t) => t
       case (t, _ : TNone) => t
       case (_ : TAny, _) => tany
       case (_, _ : TAny) => tany
-      case (_ : TUnit, _ : TUnit) => tunit
       case (_: TInteger, _ : TInteger) => tinteger
       case (_ : TBoolean, _ : TBoolean) => tboolean
       case (_ : TString, _ : TString) => tstring
@@ -134,14 +115,10 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
         case _ : ValueExpr.VInteger => tinteger
         case _ : ValueExpr.VBoolean => tboolean
         case _ : ValueExpr.VString => tstring
-        case ValueExpr.VTuple(elems) => 
-          norm(TTuple(elems.map(typeit _)))
-        case ValueExpr.VRecord(fields) => 
-          norm(TRecord(fields.mapValues(typeit _)))
-        case ValueExpr.VSet(elems) => 
-          norm(TSet(elems.foldLeft(tnone){case (t, v) => join(t, typeit(v))}))
-        case ValueExpr.VVector(elems) => 
-          norm(TVector(elems.foldLeft(tnone){case (t, v) => join(t, typeit(v))}))          
+        case ValueExpr.VTuple(elems) => TTuple(elems.map(typeit _))
+        case ValueExpr.VRecord(fields) => TRecord(fields.mapValues(typeit _))
+        case ValueExpr.VSet(elems) => TSet(elems.foldLeft(tnone){case (t, v) => join(t, typeit(v))})
+        case ValueExpr.VVector(elems) => TVector(elems.foldLeft(tnone){case (t, v) => join(t, typeit(v))})         
         case ValueExpr.VMap(mappings) =>
           var domain = tnone
           var target = tnone
@@ -149,7 +126,7 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
             domain = join(domain, typeit(d))
             target = join(target, typeit(t))
           }
-          norm(TMap(domain, target))
+          TMap(domain, target)
         case ValueExpr.VIf(cond, vtrue, vfalse) =>
           val result_ty = join(typeit(vtrue), typeit(vfalse))
           val sig = Signature(Signature(tboolean)(result_ty))
@@ -240,13 +217,13 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
             case None => 
               if (types.isEmpty) tunit
               else if (types.size == 1) types(0)
-              else norm(TTuple(types))
+              else TTuple(types)
             case Some(value) =>
               typeValueExpr(currentEnv, value)
           }
-        case LexerExpr.Optional(lexer) => norm(TVector(typeit(env, lexer)))
-        case LexerExpr.Repeat(lexer) => norm(TVector(typeit(env, lexer)))
-        case LexerExpr.Repeat1(lexer) => norm(TVector(typeit(env, lexer)))
+        case LexerExpr.Optional(lexer) => TVector(typeit(env, lexer))
+        case LexerExpr.Repeat(lexer) => TVector(typeit(env, lexer))
+        case LexerExpr.Repeat1(lexer) => TVector(typeit(env, lexer))
         case LexerExpr.And(lexer) => typeit(env, lexer)
         case LexerExpr.Not(lexer) => 
           val _ = typeit(env, lexer)
