@@ -25,6 +25,8 @@ package object api {
 
   type VarName = NameSegment
 
+  type FieldName = NameSegment
+
   type Env = (TypeExpr, Map[VarName, TypeExpr], Map[Name, FunType])
 
   def updateEnv(env : Env, varname : VarName, ty : TypeExpr) : Env = {

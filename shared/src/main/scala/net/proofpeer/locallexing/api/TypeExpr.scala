@@ -18,7 +18,7 @@ final object TypeExpr {
     if (elems.size == 1) throw new RuntimeException("tuple must have zero or 2 elements or more")
   }
 
-  final case class TRecord(fields : Map[String, TypeExpr]) extends TypeExpr
+  final case class TRecord(fields : Map[FieldName, TypeExpr]) extends TypeExpr
 
   final case class TVector(elem : TypeExpr) extends TypeExpr
 
@@ -39,6 +39,9 @@ final object TypeExpr {
   val tinteger = seal(TInteger())
   val tboolean = seal(TBoolean())
   val tstring = seal(TString())
+  val tanyvector = seal(TVector(tany))
+  val tanyset = seal(TSet(tany))
+  val tanymap = seal(TMap(tany, tany))
 
 }
 
