@@ -18,10 +18,21 @@ final object TypeChecking {
   case class ValueHasWrongType(v : ValueExpr, ty : TypeExpr, expected_ty : TypeExpr)
     extends ErrorMessage("value %0 has type %1 instead of expected type %2", Vector(v, ty, expected_ty))
 
+  case class InvalidFieldAccess(v : ValueExpr, ty : TypeExpr, field : FieldName)
+    extends ErrorMessage("value %0 of type %1 does not have field %2", Vector(v, ty, field))
+
+  case class InvalidTupleAccess(v : ValueExpr, ty : TypeExpr, n : TupleIndex)
+    extends ErrorMessage("value %0 of type %1 cannot be accessed with tuple index %2", 
+      Vector(v, ty, n))
+
 }
 
-final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
+final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
 
+  val Signature = new Signature(this)
+  val SignatureDefs = new SignatureDefs(Signature)
+
+  import SignatureDefs._
   import TypeExpr._
   import TypeChecking._
 
@@ -169,104 +180,22 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
         case ValueExpr.VDiv(x, y) => Signature.check(sigDiv, env, x, y)
         case ValueExpr.VMod(x, y) => Signature.check(sigMod, env, x, y)
         case ValueExpr.VSize(x) => Signature.check(sigSize, env, x)
+        case ValueExpr.VApply(f, x) => Signature.check(sigApply, env, f, x)
+        case ValueExpr.VAccessField(record, field) => accessFieldType(value, typeit(record), field)
+        case ValueExpr.VAccessTuple(tuple, n) => accessTupleElemType(value, typeit(tuple), n)
+        case ValueExpr.VDispatch(value, name, cases) =>
+          val input_ty = typeit(value)
+          var result_ty : TypeExpr = tnone
+          for ((ty, v) <- cases) {
+            val case_input_ty = meet(ty, input_ty)
+            val case_output_ty = typeValueExpr(updateEnv(env, name, case_input_ty), v)
+            result_ty = join(result_ty, case_output_ty)
+          }
+          result_ty
       }
     }
     typeit(value)
   }
-
-  final object Signature {
-
-    import TypeExpr._
-
-    type Instance = (Vector[TypeExpr], Vector[TypeExpr] => TypeExpr)
-    type Signature = Vector[Instance]
-
-    def apply(args : TypeExpr*)(result : TypeExpr) : Instance = {
-      (args.toVector, _ => result)
-    }
-
-    def apply(f : TypeExpr => TypeExpr, args : TypeExpr*) : Instance = {
-      (args.toVector, types => f(types(0)))
-    }
-
-    def apply(f : (TypeExpr, TypeExpr) => TypeExpr, args : TypeExpr*) : Instance = {
-      (args.toVector, types => f(types(0), types(1)))
-    }
-
-    def apply(instances : Instance*) : Signature = {
-      instances.toVector
-    }
-
-    private def checkInstance(instance : Instance, env : Env, args : Vector[ValueExpr]) : 
-      Either[TypeExpr, Vector[ErrorMessage]] = 
-    {
-      if (instance._1.size != args.size) throw new RuntimeException("Signature.check: internal error")
-      val types = args.map(v => typeValueExpr(env, v))
-      var errors : Vector[ErrorMessage] = Vector()
-      for (i <- 0 until types.size) {
-        if (!isSubtype(types(i), instance._1(i))) 
-          errors = errors :+ ValueHasWrongType(args(i), types(i), instance._1(i))
-      }
-      if (errors.isEmpty)
-        Left(instance._2(types))
-      else
-        Right(errors)
-    }
-
-    def check(signature : Signature, env : Env, args : ValueExpr*) : TypeExpr = {
-      var errors : Vector[ErrorMessage] = null
-      val vargs = args.toVector
-      for (instance <- signature) {
-        checkInstance(instance, env, vargs) match {
-          case Left(ty) => return ty
-          case Right(errs) => 
-            if (errors == null) errors = errs
-            else if (errs.size < errors.size) errors = errs
-        }
-      }
-      for (error <- errors) er.record(error)
-      tnone
-    }
-
-  }  
-
-  final val sigIf = 
-    Signature(Signature(join _, tany, tany, tboolean))
-
-  final val sigCharacter =
-    Signature(
-      Signature(tinteger, tinteger)(tunit), 
-      Signature(tstring, tstring)(tunit))
-
-  final val sigEq = 
-    Signature(Signature(tany, tany)(tboolean))
-
-  final val sigLeq = 
-    Signature(
-      Signature(tinteger, tinteger)(tboolean), 
-      Signature(tstring, tstring)(tboolean),
-      Signature(tanyset, tanyset)(tboolean),
-      Signature(tanyset, tanymap)(tboolean))
-
-  final val sigLess = sigLeq  
-
-  final val sigAnd = Signature(Signature(tboolean, tboolean)(tboolean))
-
-  final val sigNot = Signature(Signature(tboolean)(tboolean))
-
-  final val sigPlus =
-    Signature(
-      Signature(tinteger, tinteger)(tinteger),
-      Signature(tstring, tstring)(tstring),
-      Signature(join _, tanyset, tanyset),
-      Signature(join _, tanymap, tanymap),
-      Signature(join _, tanyvector, tanyvector))
-
-  final val sigMinus = 
-    Signature(
-      Signature(tinteger, tinteger)(tinteger),
-      Signature(ty => ty, tanyset, tanyset),
-      Signature(ty => ty, tanymap, tanyset))
 
   def meet_map_set(ty1 : TypeExpr, ty2 : TypeExpr) : TypeExpr = {
     (ty1, ty2) match {
@@ -279,26 +208,65 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
     }
   }
 
-  final val sigMul =
-    Signature(
-      Signature(tinteger, tinteger)(tinteger),
-      Signature(meet _, tanyset, tanyset),
-      Signature(meet_map_set _, tanymap, tanyset))
+  def domainTypeOf(ty : TypeExpr) : TypeExpr = {
+    ty match {
+      case TMap(domain, target) => domain
+      case TNone() => tnone
+      case TCustom(name) => domainTypeOf(typeEnv.lookup(er, name))
+      case _ => throw new RuntimeException("domainTypeOf: internal error")
+    }
+  }
 
-  final val sigDiv = Signature(Signature(tinteger, tinteger)(tinteger))
+  def targetTypeOf(ty : TypeExpr) : TypeExpr = {
+    ty match {
+      case TMap(domain, target) => target
+      case TNone() => tnone
+      case TCustom(name) => targetTypeOf(typeEnv.lookup(er, name))
+      case _ => throw new RuntimeException("targetTypeOf: internal error")
+    }
+  }
 
-  final val sigMod = Signature(Signature(tinteger, tinteger)(tinteger))
+  def accessFieldType(value : ValueExpr, ty : TypeExpr, field : FieldName) : TypeExpr = {
+    ty match {
+      case TRecord(fields) => 
+        fields.get(field) match {
+          case Some(fieldty) => fieldty
+          case None => 
+            er.record(InvalidFieldAccess(value, ty, field))
+            tnone
+        }
+      case TNone() => tnone
+      case TCustom(name) => accessFieldType(value, typeEnv.lookup(er, name), field)
+      case _ => 
+        er.record(InvalidFieldAccess(value, ty, field))
+        tnone
+    }
+  }
 
-  final val sigSize = 
-    Signature(
-      Signature(tanyset)(tinteger),
-      Signature(tanymap)(tinteger),
-      Signature(tanyvector)(tinteger))
+  def accessTupleElemType(value : ValueExpr, ty : TypeExpr, n : TupleIndex) : TypeExpr = {
+    ty match {
+      case TTuple(elems) if (n.index > 0 && n.index <= elems.size) => elems(n.index)
+      case TNone() => tnone
+      case TCustom(name) => accessTupleElemType(value, typeEnv.lookup(er, name), n)
+      case _ =>
+        er.record(InvalidTupleAccess(value, ty, n))
+        tnone
+    }
+  }
+
+  def elemTypeOf(ty : TypeExpr) : TypeExpr = {
+    ty match {
+      case TSet(elem) => elem
+      case TVector(elem) => elem
+      case TCustom(name) => elemTypeOf(typeEnv.lookup(er, name))
+      case _ => throw new RuntimeException("elemTypeOf: internal error")
+    }
+  }
  
   def typeLexerExpr(env : Env, lexer : LexerExpr) : TypeExpr = {
     def typek(lexer : LexerExpr, k : ValueExpr) : TypeExpr = {
       val lexer_ty = typeit(env, lexer)
-      val sig = Signature(Signature(tinteger)(lexer_ty))
+      val sig = Signature(Signature.Method(lexer_ty)(tinteger))
       Signature.check(sig, env, k)
     }
     def typeit(env : Env, lexer : LexerExpr) : TypeExpr = {
@@ -351,13 +319,9 @@ final class TypeChecking(typeEnv : TypeEnv, er : ErrorRecorder) {
               er.record(UnknownName(name))
               tnone
             case Some((src, dest)) =>
-              val sig = Signature(Signature(src)(dest))
+              val sig = Signature(Signature.Method(dest)(src))
               Signature.check(sig, env, param)
           } 
-/*        case LexerExpr.VApply(f, x) =>
-          val fty = typeValueExpr(env, f)
-          val xty = typeValueExpr(env, x) */
-
       }
     }
     typeit(env, lexer)

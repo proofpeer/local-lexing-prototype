@@ -27,6 +27,8 @@ package object api {
 
   type FieldName = NameSegment
 
+  case class TupleIndex(index : Int) extends Annotated
+
   type Env = (TypeExpr, Map[VarName, TypeExpr], Map[Name, FunType])
 
   def updateEnv(env : Env, varname : VarName, ty : TypeExpr) : Env = {

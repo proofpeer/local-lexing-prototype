@@ -54,13 +54,13 @@ final object ValueExpr {
 
   final case class VMod(x : ValueExpr, y : ValueExpr) extends ValueExpr
 
-  //final case class VApply(f : ValueExpr, x : ValueExpr) extends ValueExpr
+  final case class VApply(f : ValueExpr, x : ValueExpr) extends ValueExpr
 
-  // final case class VAccessField(record : ValueExpr, field : FieldName) extends ValueExpr
+  final case class VAccessField(record : ValueExpr, field : FieldName) extends ValueExpr
 
-  // final case class VAccessTuple(tuple : ValueExpr, n : Int) extends ValueExpr
+  final case class VAccessTuple(tuple : ValueExpr, n : TupleIndex) extends ValueExpr 
 
-  // final case class VDispatch(value: ValueExpr, name : VarName, cases : Vector[(TypeExpr, ValueExpr)]) extends ValueExpr
+  final case class VDispatch(value: ValueExpr, name : VarName, cases : Vector[(TypeExpr, ValueExpr)]) extends ValueExpr
 
   final case class VSize(collection : ValueExpr) extends ValueExpr
 
