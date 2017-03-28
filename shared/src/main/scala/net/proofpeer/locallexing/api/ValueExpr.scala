@@ -64,4 +64,6 @@ final object ValueExpr {
 
   final case class VSize(collection : ValueExpr) extends ValueExpr
 
+  final case class VLayout(varname : VarName, layoutExpr : LayoutExpr[ValueExpr]) extends ValueExpr
+
 }

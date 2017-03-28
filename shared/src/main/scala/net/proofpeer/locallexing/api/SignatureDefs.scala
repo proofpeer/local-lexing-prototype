@@ -70,5 +70,4 @@ final class SignatureDefs(val Signature : Signature) {
       Method(constFunc(tboolean))(constFunc(tanyset), v => elemTypeOf(v(0))),
       Method(v => elemTypeOf(v(0)))(constFunc(tanyvector), constFunc(tinteger)))
 
-
 }

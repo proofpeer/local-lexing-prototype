@@ -29,10 +29,15 @@ package object api {
 
   case class TupleIndex(index : Int) extends Annotated
 
-  type Env = (TypeExpr, Map[VarName, TypeExpr], Map[Name, FunType])
+  final case class Env(param : TypeExpr, vars : Map[VarName, TypeExpr], layoutVars : Set[VarName], functions: Map[Name, FunType]) {
+    def hasLayout(varname : VarName) : Boolean = layoutVars.contains(varname)
+  }
 
-  def updateEnv(env : Env, varname : VarName, ty : TypeExpr) : Env = {
-    (env._1, env._2 + (varname -> ty), env._3)
+  def updateEnv(env : Env, varname : VarName, ty : TypeExpr, hasGeometry : Boolean) : Env = {
+    if (hasGeometry)
+      Env(env.param, env.vars + (varname -> ty), env.layoutVars + varname, env.functions)
+    else
+      Env(env.param, env.vars + (varname -> ty), env.layoutVars - varname, env.functions)
   }
 
 }

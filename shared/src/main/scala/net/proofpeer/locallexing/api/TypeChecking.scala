@@ -25,6 +25,9 @@ final object TypeChecking {
     extends ErrorMessage("value %0 of type %1 cannot be accessed with tuple index %2", 
       Vector(v, ty, n))
 
+  case class InvalidLayout(v : VarName, layoutExpr : LayoutExpr[ValueExpr]) 
+    extends ErrorMessage("variable %0 does not have layout field %1", Vector(v, layoutExpr))
+
 }
 
 final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
@@ -143,11 +146,11 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
     def typeit(value : ValueExpr) : TypeExpr = {
       value match {
         case ValueExpr.VUnit() => tunit
-        case ValueExpr.VThis() => env._1
+        case ValueExpr.VThis() => env.param
         case ValueExpr.VAbort() => tnone
         case ValueExpr.VFail() => tnone
         case vvar@ValueExpr.VVar(varname) => 
-          env._2.get(varname) match {
+          env.vars.get(varname) match {
             case None => 
               er.record(UnknownVVar(vvar))
               tnone
@@ -183,15 +186,26 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
         case ValueExpr.VApply(f, x) => Signature.check(sigApply, env, f, x)
         case ValueExpr.VAccessField(record, field) => accessFieldType(value, typeit(record), field)
         case ValueExpr.VAccessTuple(tuple, n) => accessTupleElemType(value, typeit(tuple), n)
-        case ValueExpr.VDispatch(value, name, cases) =>
+        case ValueExpr.VDispatch(value, varname, cases) =>
           val input_ty = typeit(value)
           var result_ty : TypeExpr = tnone
+          val hasLayout = 
+            value match {
+              case ValueExpr.VVar(v) => env.hasLayout(v)
+              case _ => false
+            }
           for ((ty, v) <- cases) {
             val case_input_ty = meet(ty, input_ty)
-            val case_output_ty = typeValueExpr(updateEnv(env, name, case_input_ty), v)
+            val case_output_ty = typeValueExpr(updateEnv(env, varname, case_input_ty, hasLayout), v)
             result_ty = join(result_ty, case_output_ty)
           }
           result_ty
+        case ValueExpr.VLayout(varname, layoutExpr) => 
+          if (env.hasLayout(varname)) tinteger
+          else {
+            er.record(InvalidLayout(varname, layoutExpr))
+            tnone
+          }
       }
     }
     typeit(value)
@@ -283,7 +297,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
             if (!isTUnit(ty)) types = types :+ ty
             binder match {
               case None => // do nothing
-              case Some(varname) => currentEnv = updateEnv(currentEnv, varname, ty)
+              case Some(varname) => currentEnv = updateEnv(currentEnv, varname, ty, true)
             }
           }
           value match {
@@ -313,7 +327,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
         case LexerExpr.RowGeq(lexer, k) => typek(lexer, k)
         case LexerExpr.RowLeq(lexer, k) => typek(lexer, k)
         case LexerExpr.Call(name, param) => 
-          env._3.get(name) match {
+          env.functions.get(name) match {
             case None => 
               val _ = typeValueExpr(env, param)
               er.record(UnknownName(name))
