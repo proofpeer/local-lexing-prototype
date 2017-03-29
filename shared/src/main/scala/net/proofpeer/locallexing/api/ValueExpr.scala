@@ -10,9 +10,9 @@ final object ValueExpr {
 
   final case class VFail() extends ValueExpr
 
-  final case class VVar(name : VarName) extends ValueExpr
-
   final case class VAbort() extends ValueExpr
+
+  final case class VVar(name : VarName) extends ValueExpr
 
   final case class VInteger(i: BigInt) extends ValueExpr
 

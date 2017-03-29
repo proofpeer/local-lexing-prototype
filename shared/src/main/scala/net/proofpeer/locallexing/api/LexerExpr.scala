@@ -9,8 +9,6 @@ final object LexerExpr {
 
   final case class Fail() extends LexerExpr
 
-  final case class Empty() extends LexerExpr
-
   final case class Character(min : ValueExpr, max : ValueExpr) extends LexerExpr
 
   final case class Choice(lexer1 : LexerExpr, lexer2 : LexerExpr) extends LexerExpr
@@ -59,6 +57,8 @@ final object LexerExpr {
   def char(c : Int) : Character = range(c, c)
 
   def char(c : Char) : Character = range(c, c)
+
+  def Empty() : LexerExpr = Sequence(Vector(), None)
 
   def string(s : String) : LexerExpr = {
     StringUtils.codePoints(s) match {

@@ -286,7 +286,6 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
     def typeit(env : Env, lexer : LexerExpr) : TypeExpr = {
       lexer match {
         case LexerExpr.Fail() => tnone
-        case LexerExpr.Empty() => tunit
         case LexerExpr.Character(min, max) => Signature.check(sigCharacter, env, min, max)
         case LexerExpr.Choice(lexer1, lexer2) => join(typeit(env, lexer1), typeit(env, lexer2))
         case LexerExpr.Sequence(lexers, value) =>
@@ -340,5 +339,46 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
     }
     typeit(env, lexer)
   }
+
+  def typeParserExpr(env : Env, parser : ParserExpr) : TypeExpr = {
+    def typeit(env : Env, parser : ParserExpr) : TypeExpr = {
+      parser match {
+        case ParserExpr.Choice(parser1, parser2) => join(typeit(env, parser1), typeit(env, parser2))
+        case ParserExpr.Sequence(parsers, value) =>
+          var currentEnv = env
+          var types : Vector[TypeExpr] = Vector()
+          for ((parser, binder) <- parsers) {
+            val ty = typeit(currentEnv, parser)
+            if (!isTUnit(ty)) types = types :+ ty
+            binder match {
+              case None => // do nothing
+              case Some(varname) => currentEnv = updateEnv(currentEnv, varname, ty, true)
+            }
+          }
+          value match {
+            case None => 
+              if (types.isEmpty) tunit
+              else if (types.size == 1) types(0)
+              else TTuple(types)
+            case Some(value) =>
+              typeValueExpr(currentEnv, value)
+          }
+        case ParserExpr.Optional(parser) => TVector(typeit(env, parser))
+        case ParserExpr.Repeat(parser) => TVector(typeit(env, parser))
+        case ParserExpr.Repeat1(parser) => TVector(typeit(env, parser))
+        case ParserExpr.Call(name, param) => 
+          env.functions.get(name) match {
+            case None => 
+              val _ = typeValueExpr(env, param)
+              er.record(UnknownName(name))
+              tnone
+            case Some((src, dest)) =>
+              val sig = Signature(Signature.Method(dest)(src))
+              Signature.check(sig, env, param)
+          } 
+      }
+    }
+    typeit(env, parser)
+  }  
 
 }
