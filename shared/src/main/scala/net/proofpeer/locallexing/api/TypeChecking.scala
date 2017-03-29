@@ -326,7 +326,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
         case LexerExpr.RowGeq(lexer, k) => typek(lexer, k)
         case LexerExpr.RowLeq(lexer, k) => typek(lexer, k)
         case LexerExpr.Call(name, param) => 
-          env.functions.get(name) match {
+          env.functions(name) match {
             case None => 
               val _ = typeValueExpr(env, param)
               er.record(UnknownName(name))
@@ -367,7 +367,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
         case ParserExpr.Repeat(parser) => TVector(typeit(env, parser))
         case ParserExpr.Repeat1(parser) => TVector(typeit(env, parser))
         case ParserExpr.Call(name, param) => 
-          env.functions.get(name) match {
+          env.functions(name) match {
             case None => 
               val _ = typeValueExpr(env, param)
               er.record(UnknownName(name))

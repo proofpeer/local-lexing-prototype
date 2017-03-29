@@ -17,9 +17,7 @@ package object api {
 
   case class NameSegment(s : String) extends Annotated
 
-  case class ModuleName(segments : Vector[NameSegment]) extends Annotated
-
-  case class Name(moduleName : ModuleName, localName : NameSegment) extends Annotated
+  case class Name(namespace : Namespace, localName : NameSegment) extends Annotated
 
   type FunType = (TypeExpr, TypeExpr)
 
@@ -27,14 +25,16 @@ package object api {
 
   type FieldName = NameSegment
 
+  type LocalName = NameSegment
+
   case class TupleIndex(index : Int) extends Annotated
 
-  final case class Env(param : TypeExpr, vars : Map[VarName, TypeExpr], layoutVars : Set[VarName], functions: Map[Name, FunType]) {
+  final case class Env(param : TypeExpr, vars : Map[VarName, TypeExpr], layoutVars : Set[VarName], functions : Name => Option[FunType]) {
     def hasLayout(varname : VarName) : Boolean = layoutVars.contains(varname)
   }
 
-  def updateEnv(env : Env, varname : VarName, ty : TypeExpr, hasGeometry : Boolean) : Env = {
-    if (hasGeometry)
+  def updateEnv(env : Env, varname : VarName, ty : TypeExpr, hasLayout : Boolean) : Env = {
+    if (hasLayout)
       Env(env.param, env.vars + (varname -> ty), env.layoutVars + varname, env.functions)
     else
       Env(env.param, env.vars + (varname -> ty), env.layoutVars - varname, env.functions)
