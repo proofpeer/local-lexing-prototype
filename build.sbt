@@ -9,8 +9,9 @@ lazy val ll = crossProject.in(file(".")).
     name := "LocalLexing Prototype",
     organization := "net.proofpeer",
     version := "0.2-SNAPSHOT",
-    scalaVersion := "2.12.0",
-    scalacOptions += "-deprecation"
+    scalaVersion := "2.12.1",
+    scalacOptions += "-deprecation",
+    scalacOptions += "-feature"
   )
 
 lazy val llJS = ll.js

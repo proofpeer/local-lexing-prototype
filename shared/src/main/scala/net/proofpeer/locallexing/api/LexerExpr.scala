@@ -3,7 +3,7 @@ package net.proofpeer.locallexing.api
 import net.proofpeer.locallexing.utils.Range
 import net.proofpeer.locallexing.utils.StringUtils
 
-sealed abstract class LexerExpr extends Annotated
+sealed abstract class LexerExpr extends Annotated 
 
 final object LexerExpr {
 

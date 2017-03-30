@@ -1,17 +1,17 @@
 package net.proofpeer.locallexing.api
 
-sealed abstract class LayoutExpr[A] extends Annotated
+sealed trait LayoutExpr extends Annotated
 
 final object LayoutExpr {
 
-  final case class FirstCol[A]() extends LayoutExpr[A]
+  final case class FirstCol() extends LayoutExpr
 
-  final case class FirstRow[A]() extends LayoutExpr[A]
+  final case class FirstRow() extends LayoutExpr
 
-  final case class LastCol[A]() extends LayoutExpr[A]
+  final case class LastCol() extends LayoutExpr
 
-  final case class LastRow[A]() extends LayoutExpr[A]
+  final case class LastRow() extends LayoutExpr
 
-  final case class LeftMost[A]() extends LayoutExpr[A]
+  final case class LeftMost() extends LayoutExpr
 
 }

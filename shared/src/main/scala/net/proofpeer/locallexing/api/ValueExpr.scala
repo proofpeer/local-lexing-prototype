@@ -1,6 +1,38 @@
 package net.proofpeer.locallexing.api
 
-sealed abstract class ValueExpr extends Annotated
+sealed abstract class ValueExpr extends Annotated {
+
+  def == (v : ValueExpr) : ValueExpr = ValueExpr.VEq(this, v)
+
+  def <= (v : ValueExpr) : ValueExpr = ValueExpr.VLeq(this, v)
+
+  def < (v : ValueExpr) : ValueExpr = ValueExpr.VLess(this, v)
+
+  def >= (v : ValueExpr) : ValueExpr = (v <= this)
+
+  def > (v : ValueExpr) : ValueExpr = (v > this)
+
+  def & (v : ValueExpr) : ValueExpr = ValueExpr.VAnd(this, v)  
+
+  def unary_~ : ValueExpr = ValueExpr.VNot(this)
+
+  def + (v : ValueExpr) : ValueExpr = ValueExpr.VPlus(this, v)
+
+  def - (v : ValueExpr) : ValueExpr = ValueExpr.VMinus(this, v)
+
+  def * (v : ValueExpr) : ValueExpr = ValueExpr.VMul(this, v)
+
+  def / (v : ValueExpr) : ValueExpr = ValueExpr.VDiv(this, v)
+
+  def % (v : ValueExpr) : ValueExpr = ValueExpr.VMod(this, v)
+
+  def apply(v : ValueExpr) : ValueExpr = ValueExpr.VApply(this, v)
+
+  def f(field : String) : ValueExpr = ValueExpr.VAccessField(this, NameSegment(field))
+
+  def n(index : Int) : ValueExpr = ValueExpr.VAccessTuple(this, TupleIndex(index))
+
+}
 
 final object ValueExpr {
 
@@ -62,8 +94,10 @@ final object ValueExpr {
 
   final case class VDispatch(value: ValueExpr, name : VarName, cases : Vector[(TypeExpr, ValueExpr)]) extends ValueExpr
 
+  final case class VLet(bindings : Vector[(ValueExpr, VarName)], value : ValueExpr) extends ValueExpr
+
   final case class VSize(collection : ValueExpr) extends ValueExpr
 
-  final case class VLayout(varname : VarName, layoutExpr : LayoutExpr[ValueExpr]) extends ValueExpr
+  final case class VLayout(varname : VarName, layoutExpr : LayoutExpr) extends ValueExpr
 
 }

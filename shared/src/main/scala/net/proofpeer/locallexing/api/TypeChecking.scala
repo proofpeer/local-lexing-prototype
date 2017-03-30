@@ -25,7 +25,7 @@ final object TypeChecking {
     extends ErrorMessage("value %0 of type %1 cannot be accessed with tuple index %2", 
       Vector(v, ty, n))
 
-  case class InvalidLayout(v : VarName, layoutExpr : LayoutExpr[ValueExpr]) 
+  case class InvalidLayout(v : VarName, layoutExpr : LayoutExpr) 
     extends ErrorMessage("variable %0 does not have layout field %1", Vector(v, layoutExpr))
 
 }
@@ -142,6 +142,13 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
     typesAreEqual(ty, tnone)
   }
 
+  def hasLayout(env : Env, value : ValueExpr) : Boolean = {
+    value match {
+      case ValueExpr.VVar(v) => env.hasLayout(v)
+      case _ => false
+    }
+  }
+
   def typeValueExpr(env : Env, value : ValueExpr) : TypeExpr = {
     def typeit(value : ValueExpr) : TypeExpr = {
       value match {
@@ -189,17 +196,20 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
         case ValueExpr.VDispatch(value, varname, cases) =>
           val input_ty = typeit(value)
           var result_ty : TypeExpr = tnone
-          val hasLayout = 
-            value match {
-              case ValueExpr.VVar(v) => env.hasLayout(v)
-              case _ => false
-            }
+          val gotLayout = hasLayout(env, value)
           for ((ty, v) <- cases) {
             val case_input_ty = meet(ty, input_ty)
-            val case_output_ty = typeValueExpr(updateEnv(env, varname, case_input_ty, hasLayout), v)
+            val case_output_ty = typeValueExpr(updateEnv(env, varname, case_input_ty, gotLayout), v)
             result_ty = join(result_ty, case_output_ty)
           }
           result_ty
+        case ValueExpr.VLet(bindings, value) =>
+          var currentEnv : Env = env
+          for ((v, x) <- bindings) {
+            val v_ty = typeValueExpr(currentEnv, v)
+            currentEnv = updateEnv(currentEnv, x, v_ty, hasLayout(currentEnv, v))
+          }
+          typeValueExpr(currentEnv, value)
         case ValueExpr.VLayout(varname, layoutExpr) => 
           if (env.hasLayout(varname)) tinteger
           else {
@@ -376,6 +386,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
               val sig = Signature(Signature.Method(dest)(src))
               Signature.check(sig, env, param)
           } 
+        case ParserExpr.Lexer(lexer) => typeLexerExpr(env, lexer)
       }
     }
     typeit(env, parser)
