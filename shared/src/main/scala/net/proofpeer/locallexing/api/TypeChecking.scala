@@ -296,6 +296,7 @@ final class TypeChecking(val typeEnv : TypeEnv, val er : ErrorRecorder) {
     def typeit(env : Env, lexer : LexerExpr) : TypeExpr = {
       lexer match {
         case LexerExpr.Fail() => tnone
+        case LexerExpr.EOF() => tunit
         case LexerExpr.Character(min, max) => Signature.check(sigCharacter, env, min, max)
         case LexerExpr.Choice(lexer1, lexer2) => join(typeit(env, lexer1), typeit(env, lexer2))
         case LexerExpr.Sequence(lexers, value) =>

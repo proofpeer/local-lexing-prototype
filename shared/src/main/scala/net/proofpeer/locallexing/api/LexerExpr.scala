@@ -9,6 +9,8 @@ final object LexerExpr {
 
   final case class Fail() extends LexerExpr
 
+  final case class EOF() extends LexerExpr
+
   final case class Character(min : ValueExpr, max : ValueExpr) extends LexerExpr
 
   final case class Choice(lexer1 : LexerExpr, lexer2 : LexerExpr) extends LexerExpr

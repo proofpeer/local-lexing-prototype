@@ -67,7 +67,6 @@ class GrammarDSL {
   def defT(name : LocalName, input_ty : TypeExpr = TypeExpr.tunit, output_ty : TypeExpr = TypeExpr.tunit, isPublic : Boolean = true, 
     isErrorTerminal : Boolean = false)(lexer : LexerExpr) 
   {
-
     declT(name, input_ty, output_ty, isPublic, isErrorTerminal)
     ruleT(name, lexer)
   }
@@ -114,6 +113,8 @@ class GrammarDSL {
   // LexerExprs
 
   def lFail : LexerExpr = LexerExpr.Fail()
+
+  def lEOF : LexerExpr = LexerExpr.EOF()
 
   def lChar(min : ValueExpr, max : ValueExpr) : LexerExpr = LexerExpr.Character(min, max)
 
@@ -179,7 +180,7 @@ class GrammarDSL {
 
   def P(name : Name, param : ValueExpr) : ParserExpr = ParserExpr.Call(name, param)
 
-  def pLex(lexer : LexerExpr) : ParserExpr = ParserExpr.Lexer(lexer)
+  def pL(lexer : LexerExpr) : ParserExpr = ParserExpr.Lexer(lexer)
 
   // ValueExprs (also see methods in ValueExpr class)
 
