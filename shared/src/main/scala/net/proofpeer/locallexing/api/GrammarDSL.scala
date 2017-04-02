@@ -242,6 +242,24 @@ class GrammarDSL {
 
 }
 
+final class GrammarRegistry {
+
+  def add(namespace : Namespace, grammar : Grammar) {
+    if (!namespace.isAbsolute) throw new RuntimeException("Grammar namespaces must be absolute.")
+    if (grammars_.get(namespace).isDefined) throw new RuntimeException("Grammar namespace is already registered.")
+    grammars_ = grammars_ + (namespace -> grammar)
+  }
+
+  def add(namespace : Namespace, dsl : GrammarDSL) {
+    add(namespace, dsl.toGrammar)
+  }
+
+  def grammars : Map[Namespace, Grammar] = grammars_
+
+  private var grammars_ : Map[Namespace, Grammar] = Map()
+
+}
+
 object TestDSL {
 
   def main(args : Array[String]) {
