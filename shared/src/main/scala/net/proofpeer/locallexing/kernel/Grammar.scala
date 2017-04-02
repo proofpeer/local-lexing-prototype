@@ -1,8 +1,5 @@
 package net.proofpeer.locallexing.kernel
 
-/** 
-  The start nonterminal has always index 0. 
-  */
 final case class Grammar[CHAR, P](
   nonterminals : Vector[Grammar.Nonterminal[P]],
   terminals : Vector[Grammar.Terminal[CHAR, P]],
@@ -71,7 +68,6 @@ final object Grammar {
     def fail[T](s : String) {
       throw Err("error checking grammar: " + s)
     }
-    if (g.nonterminals.size == 0) fail("start nonterminal expected")
 
     def checkRule(rule : Rule[P]) {
       for ((symbol, _) <- rule.rhs) {

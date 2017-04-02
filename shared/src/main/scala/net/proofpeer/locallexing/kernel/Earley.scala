@@ -156,14 +156,12 @@ object Earley {
 
     def numCoreItems : Int = coreItems.size
 
-    val startNonterminal = Grammar.NS(0)
-
   }
 
 }
 
 
-final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
+final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P], startNonterminal : Grammar.NS = Grammar.NS(0)) {
 
   import Earley._
   import Grammar._
@@ -184,7 +182,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
     val numCoreItems = kernel.numCoreItems
     for (coreItemId <- 0 until numCoreItems) {
       val coreItem = kernel.coreItem(coreItemId)
-      if (coreItem.dot == 0 && coreItem.nonterminal == kernel.startNonterminal) {
+      if (coreItem.dot == 0 && coreItem.nonterminal == startNonterminal) {
         coreItem.mkInitialItem(0, kernel.grammar.startParam) match {
           case Some(item) => bin = addItem(bin, item)
           case None =>
@@ -325,7 +323,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
     for (item <- bin) {
       if (item.origin == 0) {
         val coreItem = kernel.coreItemOf(item)
-        if (coreItem.nonterminal == kernel.startNonterminal && coreItem.nextSymbol == None 
+        if (coreItem.nonterminal == startNonterminal && coreItem.nextSymbol == None 
           && item.param == grammar.startParam)
           results = results + item.result
       }
@@ -456,7 +454,7 @@ final class Earley[CHAR, P](kernel : Earley.Kernel[CHAR, P]) {
         val ptc = new ParseTreeConstruction(bins)
         var parsetrees : Vector[ParseTree[P]] = Vector()
         for (result <- results)
-          parsetrees = parsetrees :+ ptc.getParseTree(kernel.startNonterminal, kernel.grammar.startParam, result, 0, input.size)
+          parsetrees = parsetrees :+ ptc.getParseTree(startNonterminal, kernel.grammar.startParam, result, 0, input.size)
         ptc.fillCycles()
         Left(parsetrees)
       case Right(k) => 
